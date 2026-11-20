@@ -100,7 +100,8 @@ async function download(job, onProgress = async () => {}) {
           received += chunk.length;
           if (received > maxBytes) throw new Error("حجم فایل از سقف این نسخه بیشتر است.");
           if (!out.write(Buffer.from(chunk))) await new Promise((resolve,reject)=>{out.once("drain",resolve);out.once("error",reject);});
-          job.progress = { received, total: declared || null, percent: declared ? Math.min(99,Math.floor(received/declared*100)) : null };\n          void onProgress(job.progress.percent, received, declared || null);
+          job.progress = { received, total: declared || null, percent: declared ? Math.min(99,Math.floor(received/declared*100)) : null };
+          void onProgress(job.progress.percent, received, declared || null);
         }
         await new Promise((resolve,reject)=>out.end(err=>err?reject(err):resolve()));
       } catch (e) { out.destroy(); await fs.promises.rm(target,{force:true}); throw e; }
@@ -112,31 +113,52 @@ async function download(job, onProgress = async () => {}) {
     throw new Error("تعداد تغییر مسیر لینک بیش از حد است.");
   } finally { clearTimeout(timeout); }
 }
-async function publish(job, token) {
+async function publish(job, token, onProgress = async () => {}) {
   job.status = "checking_bot";
   await botCall(token, "getMe");
-  job.status = "requesting_upload";
-  const requested = await botCall(token, "requestSendFile", { type:"File" });
-  if (!requested.upload_url) throw new Error("سرویس بات نشانی آپلود برنگرداند.");
-  const uploadUrl = new URL(requested.upload_url);
-  if (uploadUrl.protocol !== "https:") throw new Error("نشانی آپلود امن نیست.");
-  job.status = "uploading";
-  const form = new FormData();
-  form.append("file", fs.createReadStream(job.filePath), { filename:job.fileName, knownLength:job.bytes });
-  const uploaded = await axios.post(uploadUrl.toString(), form, {
-    headers: form.getHeaders(),
-    maxBodyLength: Infinity, maxContentLength: Infinity, timeout: 0, maxRedirects: 0
-  });
-  const fileId = uploaded.data?.data?.file_id || uploaded.data?.file_id;
-  if (!fileId) throw new Error("آپلود انجام شد اما شناسه فایل دریافت نشد.");
-  job.status = "sending";
-  const payload = { chat_id:job.channelId, file_id:fileId };
-  if (job.caption) payload.text = job.caption;
-  const sent = await botCall(token, "sendFile", payload);
-  if (!sent.message_id) throw new Error("فایل آپلود شد اما API شناسه پیام برنگرداند؛ شناسه کانال و دسترسی بات را بررسی کنید.");
-  job.messageId = sent.message_id;
+  const parts = Math.ceil(job.bytes / rubikaChunkBytes);
+  let uploadedBytes = 0;
+  const sentIds = [];
+  for (let part = 0; part < parts; part++) {
+    const start = part * rubikaChunkBytes;
+    const end = Math.min(job.bytes - 1, start + rubikaChunkBytes - 1);
+    const partBytes = end - start + 1;
+    job.status = "requesting_upload";
+    const requested = await botCall(token, "requestSendFile", { type:"File" });
+    if (!requested.upload_url) throw new Error("سرویس بات نشانی آپلود برنگرداند.");
+    const uploadUrl = new URL(requested.upload_url);
+    if (uploadUrl.protocol !== "https:") throw new Error("نشانی آپلود امن نیست.");
+    job.status = "uploading";
+    const form = new FormData();
+    const partName = parts > 1 ? job.fileName + ".part" + String(part + 1).padStart(3,"0") : job.fileName;
+    form.append("file", fs.createReadStream(job.filePath,{start,end}), { filename:partName, knownLength:partBytes });
+    const uploaded = await axios.post(uploadUrl.toString(), form, {
+      headers: form.getHeaders(),
+      maxBodyLength: Infinity, maxContentLength: Infinity, timeout: 0, maxRedirects: 0,
+      onUploadProgress: event => {
+        const current = Math.min(partBytes, Number(event.loaded || 0));
+        const percent = Math.min(99,Math.floor((uploadedBytes + current) / job.bytes * 100));
+        void onProgress(percent, uploadedBytes + current, job.bytes, part + 1, parts);
+      }
+    });
+    const fileId = uploaded.data?.data?.file_id || uploaded.data?.file_id;
+    if (!fileId) throw new Error("آپلود انجام شد اما شناسه فایل دریافت نشد.");
+    job.status = "sending";
+    const payload = { chat_id:job.channelId, file_id:fileId };
+    const caption = [job.caption, parts > 1 ? "بخش " + (part + 1) + " از " + parts : ""].filter(Boolean).join("\n");
+    if (caption) payload.text = caption;
+    const sent = await botCall(token, "sendFile", payload);
+    if (!sent.message_id) throw new Error("فایل آپلود شد اما API شناسه پیام برنگرداند؛ شناسه کانال و دسترسی بات را بررسی کنید.");
+    sentIds.push(sent.message_id);
+    uploadedBytes += partBytes;
+    void onProgress(Math.floor(uploadedBytes / job.bytes * 100), uploadedBytes, job.bytes, part + 1, parts);
+  }
+  job.messageId = sentIds[sentIds.length - 1];
+  job.messageIds = sentIds;
   job.status = "sent";
-  job.message = "فایل با موفقیت در کانال ارسال شد.";
+  job.message = parts > 1
+    ? "فایل به " + parts + " بخش تقسیم و همه بخش‌ها در کانال ارسال شدند."
+    : "فایل با موفقیت در کانال ارسال شد.";
 }
 let busy = false;
 async function runQueue() {
@@ -212,9 +234,9 @@ async function updateBotProgress(job, stage, percent, done, total) {
   if (percent !== 100 && now - (job.lastProgressAt || 0) < 1800) return;
   job.lastProgressAt = now;
   const p = Number.isFinite(percent) ? Math.max(0,Math.min(100,percent)) : null;
-  const bar = p === null ? "" : "\\n" + "█".repeat(Math.floor(p/5)) + "░".repeat(20-Math.floor(p/5)) + " " + p + "%";
-  const size = total ? "\\n" + (done/1048576).toFixed(1) + " / " + (total/1048576).toFixed(1) + " MB" : "";
-  const text = "📦 FileStorm\\n" + stage + bar + size;
+  const bar = p === null ? "" : "\n" + "█".repeat(Math.floor(p/5)) + "░".repeat(20-Math.floor(p/5)) + " " + p + "%";
+  const size = total ? "\n" + (done/1048576).toFixed(1) + " / " + (total/1048576).toFixed(1) + " MB" : "";
+  const text = "📦 FileStorm\n" + stage + bar + size;
   try {
     await botCall(job.botToken,"editMessageText",{chat_id:job.botChatId,message_id:job.progressMessageId,text});
   } catch (e) {
@@ -230,11 +252,11 @@ async function handleBotUpdate(update) {
   if (allowedBotUsers.size && !allowedBotUsers.has(senderId)) return;
   const text = String(message.text).trim();
   if (text === "/start" || text === "/help") {
-    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"سلام! لینک مستقیم فایل را همین‌جا بفرست تا سرور آن را دانلود و به کانال مقصد منتقل کند.\\n\\nبرای شروع، یک لینک HTTP/HTTPS مستقیم ارسال کن."});
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"سلام! لینک مستقیم فایل را همین‌جا بفرست تا سرور آن را دانلود و به کانال مقصد منتقل کند.\n\nبرای شروع، یک لینک HTTP/HTTPS مستقیم ارسال کن."});
     return;
   }
   if (text === "/id") {
-    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"شناسه گفت‌وگوی شما: " + chatId + (senderId ? "\\nشناسه کاربری: " + senderId : "")});
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"شناسه گفت‌وگوی شما: " + chatId + (senderId ? "\nشناسه کاربری: " + senderId : "")});
     return;
   }
   let chatType = "";
@@ -248,9 +270,9 @@ async function handleBotUpdate(update) {
     await botCall(botToken,"sendMessage",{chat_id:chatId,text:"سرویس هنوز شناسه کانال مقصد را دریافت نکرده است. مدیر باید TARGET_CHANNEL_ID را در تنظیمات سرور ثبت کند."});
     return;
   }
-  const match = text.match(/https?:\\/\\/[^\\s<>]+/i);
+  const match = text.match(/https?:\/\/[^\s<>]+/i);
   if (!match) {
-    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"لطفاً فقط لینک مستقیم فایل را بفرست. لینک باید بدون صفحه واسطه، قابل دانلود باشد."});
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"لطفاً لینک مستقیم فایل را بفرست. لینک باید بدون صفحه واسطه، قابل دانلود باشد."});
     return;
   }
   const active = jobs.filter(j=>["queued","downloading","checking_bot","requesting_upload","uploading","sending"].includes(j.status)).length;
@@ -258,8 +280,8 @@ async function handleBotUpdate(update) {
     await botCall(botToken,"sendMessage",{chat_id:chatId,text:"صف انتقال فعلاً پر است؛ چند دقیقه دیگر دوباره تلاش کن."});
     return;
   }
-  const url = match[0].replace(/[),\\].!?]+$/g,"");
-  const reply = await botCall(botToken,"sendMessage",{chat_id:chatId,text:"درخواست دریافت شد.\\nدر حال آماده‌سازی دانلود..."});
+  const url = match[0].replace(/[),.!?]+$/g,"");
+  const reply = await botCall(botToken,"sendMessage",{chat_id:chatId,text:"درخواست دریافت شد.\nدر حال آماده‌سازی دانلود..."});
   const progressMessageId = reply.message_id || reply.message?.message_id;
   if (!progressMessageId) throw new Error("پیام وضعیت ساخته نشد.");
   const job = {
