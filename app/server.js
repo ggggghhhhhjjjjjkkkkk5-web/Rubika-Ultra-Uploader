@@ -110,11 +110,11 @@ async function download(job, onProgress = async () => {}) {
         for await (const chunk of response.body) {
           received += chunk.length;
           if (received > maxBytes) throw new Error("حجم فایل از سقف این نسخه بیشتر است.");
-          if (!out.write(Buffer.from(chunk))) await new Promise((resolve,reject)=>{out.once("drain",resolve);out.once("error",reject);});
+          if (!out.write(Buffer.from(chunk))) await new Promise((resolve,reject)=>{const onDrain=()=>{cleanup();resolve();};const onError=err=>{cleanup();reject(err);};const cleanup=()=>{out.off("drain",onDrain);out.off("error",onError);};out.once("drain",onDrain);out.once("error",onError);});
           job.progress = { received, total: declared || null, percent: declared ? Math.min(99,Math.floor(received/declared*100)) : null };
           void onProgress(job.progress.percent, received, declared || null);
         }
-        await new Promise((resolve,reject)=>out.end(err=>err?reject(err):resolve()));
+        await new Promise((resolve,reject)=>{const onError=err=>{out.off("finish",onFinish);reject(err);};const onFinish=()=>{out.off("error",onError);resolve();};out.once("error",onError);out.once("finish",onFinish);out.end();});
       } catch (e) { out.destroy(); await fs.promises.rm(target,{force:true}); throw e; }
       if (!received) { await fs.promises.rm(target,{force:true}); throw new Error("فایل دریافتی خالی است."); }
       job.fileName = safeName; job.bytes = received; job.filePath = target;
@@ -127,13 +127,16 @@ async function download(job, onProgress = async () => {}) {
 async function publish(job, token, onProgress = async () => {}) {
   job.status = "checking_bot";
   await botCall(token, "getMe");
-  const parts = Math.ceil(job.bytes / rubikaChunkBytes);
+  if (job.bytes > rubikaChunkBytes) {
+    throw new Error("این فایل از سقف یک‌فایلی فعلی Bot API روبیکا (حدود ۵۰ مگابایت) بزرگ‌تر است. برای جلوگیری از ارسال تکه‌های جدا و خراب شدن فایل اصلی، ارسال متوقف شد.");
+  }
+  const parts = 1;
   let uploadedBytes = 0;
   const sentIds = [];
   for (let part = 0; part < parts; part++) {
-    const start = part * rubikaChunkBytes;
-    const end = Math.min(job.bytes - 1, start + rubikaChunkBytes - 1);
-    const partBytes = end - start + 1;
+    const start = 0;
+    const end = job.bytes - 1;
+    const partBytes = job.bytes;
     job.status = "requesting_upload";
     const requested = await botCall(token, "requestSendFile", { type:"File" });
     if (!requested.upload_url) throw new Error("سرویس بات نشانی آپلود برنگرداند.");
@@ -141,7 +144,7 @@ async function publish(job, token, onProgress = async () => {}) {
     if (uploadUrl.protocol !== "https:") throw new Error("نشانی آپلود امن نیست.");
     job.status = "uploading";
     const form = new FormData();
-    const partName = parts > 1 ? job.fileName + ".part" + String(part + 1).padStart(3,"0") : job.fileName;
+    const partName = job.fileName;
     form.append("file", fs.createReadStream(job.filePath,{start,end}), { filename:partName, knownLength:partBytes });
     const uploaded = await axios.post(uploadUrl.toString(), form, {
       headers: form.getHeaders(),
@@ -156,7 +159,7 @@ async function publish(job, token, onProgress = async () => {}) {
     if (!fileId) throw new Error("آپلود انجام شد اما شناسه فایل دریافت نشد.");
     job.status = "sending";
     const payload = { chat_id:job.channelId, file_id:fileId };
-    const caption = [job.caption, parts > 1 ? "بخش " + (part + 1) + " از " + parts : ""].filter(Boolean).join("\n");
+    const caption = job.caption;
     if (caption) payload.text = caption;
     const sent = await botCall(token, "sendFile", payload);
     if (!sent.message_id) throw new Error("فایل آپلود شد اما API شناسه پیام برنگرداند؛ شناسه کانال و دسترسی بات را بررسی کنید.");
@@ -167,9 +170,7 @@ async function publish(job, token, onProgress = async () => {}) {
   job.messageId = sentIds[sentIds.length - 1];
   job.messageIds = sentIds;
   job.status = "sent";
-  job.message = parts > 1
-    ? "فایل به " + parts + " بخش تقسیم و همه بخش‌ها در کانال ارسال شدند."
-    : "فایل با موفقیت در کانال ارسال شد.";
+  job.message = "فایل با موفقیت در کانال ارسال شد.";
 }
 let busy = false;
 async function runQueue() {
@@ -316,6 +317,19 @@ app.post("/rubika/update/:secret", (req,res) => {
 async function pollRubikaBot() {
   if (!botToken) { console.log("FileStorm bot polling disabled: BOT_TOKEN is not configured."); return; }
   if (!targetChannelId) console.warn("FileStorm bot: TARGET_CHANNEL_ID is not configured.");
+  try {
+    await botCall(botToken,"getMe");
+    console.log("FileStorm Rubika bot token verified.");
+  } catch (e) {
+    console.error("FileStorm bot token verification failed:",e.message);
+    return;
+  }
+  try {
+    await botCall(botToken,"getChat",{chat_id:targetChannelId});
+    console.log("FileStorm target channel verified.");
+  } catch (e) {
+    console.error("FileStorm target channel verification failed:",e.message);
+  }
   if (botWebhookSecret) {
     try {
       const base = String(process.env.PUBLIC_BASE_URL || "https://filestorm-test.onrender.com").replace(/\/$/,"");
