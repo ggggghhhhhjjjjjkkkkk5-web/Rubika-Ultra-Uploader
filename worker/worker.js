@@ -64,7 +64,7 @@ async function download(url, target, job) {
     throw new Error("تعداد تغییر مسیر لینک بیش از حد است.");
   } finally { clearTimeout(timer); }
 }
-const worker = new Worker("rubika-uploads", async job => {
+const worker = new Worker("filestorm-uploads", async job => {
   const id = String(job.id).replace(/[^a-zA-Z0-9_-]/g,"");
   const target = path.join(dataDir, `${id}.bin`);
   const result = await download(job.data.url, target, job);
