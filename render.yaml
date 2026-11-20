@@ -1,0 +1,49 @@
+services:
+  - type: keyvalue
+    name: rubika-uploader-queue
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+  - type: web
+    name: rubika-ultra-uploader
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    disk:
+      name: uploader-data
+      mountPath: /data
+      sizeGB: 20
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: rubika-uploader-queue
+          type: keyvalue
+          property: connectionString
+      - key: DATA_DIR
+        value: /data
+      - key: MAX_FILE_BYTES
+        value: "15000000000"
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+  - type: worker
+    name: rubika-uploader-worker
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: npm run worker
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: rubika-uploader-queue
+          type: keyvalue
+          property: connectionString
+      - key: DATA_DIR
+        value: /data
+      - key: MAX_FILE_BYTES
+        value: "15000000000"
