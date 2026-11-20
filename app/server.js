@@ -12,6 +12,10 @@ import FormData from "form-data";
 const app = express();
 const dataDir = process.env.DATA_DIR || "./data";
 const maxBytes = Number(process.env.MAX_FILE_BYTES || 950_000_000);
+const botToken = String(process.env.BOT_TOKEN || "").trim();
+const targetChannelId = String(process.env.TARGET_CHANNEL_ID || "").trim();
+const allowedBotUsers = new Set(String(process.env.BOT_ALLOWED_USERS || "").split(",").map(x=>x.trim()).filter(Boolean));
+const rubikaChunkBytes = Math.min(Number(process.env.RUBIKA_CHUNK_BYTES || 49 * 1024 * 1024), 49 * 1024 * 1024);
 fs.mkdirSync(dataDir, { recursive: true });
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "30kb" }));
@@ -70,7 +74,7 @@ async function botCall(token, method, body = {}) {
   }
   return data.data || {};
 }
-async function download(job) {
+async function download(job, onProgress = async () => {}) {
   let current = job.url;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number(process.env.DOWNLOAD_TIMEOUT_MS || 3_600_000));
@@ -96,7 +100,7 @@ async function download(job) {
           received += chunk.length;
           if (received > maxBytes) throw new Error("حجم فایل از سقف این نسخه بیشتر است.");
           if (!out.write(Buffer.from(chunk))) await new Promise((resolve,reject)=>{out.once("drain",resolve);out.once("error",reject);});
-          job.progress = { received, total: declared || null, percent: declared ? Math.min(99,Math.floor(received/declared*100)) : null };
+          job.progress = { received, total: declared || null, percent: declared ? Math.min(99,Math.floor(received/declared*100)) : null };\n          void onProgress(job.progress.percent, received, declared || null);
         }
         await new Promise((resolve,reject)=>out.end(err=>err?reject(err):resolve()));
       } catch (e) { out.destroy(); await fs.promises.rm(target,{force:true}); throw e; }
@@ -202,5 +206,103 @@ app.post("/api/jobs", requireAuth, (req,res) => {
   res.json({id:job.id,status:job.status});
   void runQueue();
 });
+async function updateBotProgress(job, stage, percent, done, total) {
+  if (!job.botChatId || !job.progressMessageId || !job.botToken) return;
+  const now = Date.now();
+  if (percent !== 100 && now - (job.lastProgressAt || 0) < 1800) return;
+  job.lastProgressAt = now;
+  const p = Number.isFinite(percent) ? Math.max(0,Math.min(100,percent)) : null;
+  const bar = p === null ? "" : "\\n" + "█".repeat(Math.floor(p/5)) + "░".repeat(20-Math.floor(p/5)) + " " + p + "%";
+  const size = total ? "\\n" + (done/1048576).toFixed(1) + " / " + (total/1048576).toFixed(1) + " MB" : "";
+  const text = "📦 FileStorm\\n" + stage + bar + size;
+  try {
+    await botCall(job.botToken,"editMessageText",{chat_id:job.botChatId,message_id:job.progressMessageId,text});
+  } catch (e) {
+    if (!job.progressEditWarned) { job.progressEditWarned = true; console.warn("Bot progress edit failed:",e.message); }
+  }
+}
+const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
+async function handleBotUpdate(update) {
+  const message = update?.new_message || update?.update?.new_message || update?.message;
+  const chatId = update?.chat_id || update?.update?.chat_id || message?.chat_id;
+  if (!message || !chatId || !message.text) return;
+  const senderId = String(message.sender_id || "");
+  if (allowedBotUsers.size && !allowedBotUsers.has(senderId)) return;
+  const text = String(message.text).trim();
+  if (text === "/start" || text === "/help") {
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"سلام! لینک مستقیم فایل را همین‌جا بفرست تا سرور آن را دانلود و به کانال مقصد منتقل کند.\\n\\nبرای شروع، یک لینک HTTP/HTTPS مستقیم ارسال کن."});
+    return;
+  }
+  if (text === "/id") {
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"شناسه گفت‌وگوی شما: " + chatId + (senderId ? "\\nشناسه کاربری: " + senderId : "")});
+    return;
+  }
+  let chatType = "";
+  try {
+    const info = await botCall(botToken,"getChat",{chat_id:chatId});
+    const chat = info.chat || info;
+    chatType = String(chat.chat_type || chat.type || "");
+  } catch {}
+  if (chatType && chatType.toLowerCase() !== "user") return;
+  if (!targetChannelId) {
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"سرویس هنوز شناسه کانال مقصد را دریافت نکرده است. مدیر باید TARGET_CHANNEL_ID را در تنظیمات سرور ثبت کند."});
+    return;
+  }
+  const match = text.match(/https?:\\/\\/[^\\s<>]+/i);
+  if (!match) {
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"لطفاً فقط لینک مستقیم فایل را بفرست. لینک باید بدون صفحه واسطه، قابل دانلود باشد."});
+    return;
+  }
+  const active = jobs.filter(j=>["queued","downloading","checking_bot","requesting_upload","uploading","sending"].includes(j.status)).length;
+  if (active >= 2) {
+    await botCall(botToken,"sendMessage",{chat_id:chatId,text:"صف انتقال فعلاً پر است؛ چند دقیقه دیگر دوباره تلاش کن."});
+    return;
+  }
+  const url = match[0].replace(/[),\\].!?]+$/g,"");
+  const reply = await botCall(botToken,"sendMessage",{chat_id:chatId,text:"درخواست دریافت شد.\\nدر حال آماده‌سازی دانلود..."});
+  const progressMessageId = reply.message_id || reply.message?.message_id;
+  if (!progressMessageId) throw new Error("پیام وضعیت ساخته نشد.");
+  const job = {
+    id:crypto.randomUUID().slice(0,8), url, channelId:targetChannelId, caption:"",
+    status:"queued", progress:{percent:0}, createdAt:new Date().toISOString(),
+    message:"در صف پردازش", botChatId:chatId, botToken, progressMessageId
+  };
+  secrets.set(job.id,botToken);
+  jobs.push(job);
+  void runQueue();
+}
+async function pollRubikaBot() {
+  if (!botToken) { console.log("FileStorm bot polling disabled: BOT_TOKEN is not configured."); return; }
+  if (!targetChannelId) console.warn("FileStorm bot: TARGET_CHANNEL_ID is not configured.");
+  let offsetId;
+  let failures = 0;
+  try {
+    await botCall(botToken,"getMe");
+    console.log("FileStorm Rubika chat bot connected.");
+  } catch (e) {
+    console.error("FileStorm bot token check failed:",e.message);
+    return;
+  }
+  while (true) {
+    try {
+      const payload = {limit:100};
+      if (offsetId) payload.offset_id = offsetId;
+      const data = await botCall(botToken,"getUpdates",payload);
+      const updates = Array.isArray(data.updates) ? data.updates : [];
+      for (const update of updates) {
+        try { await handleBotUpdate(update); }
+        catch (e) { console.error("Bot update handling failed:",e.message); }
+      }
+      if (data.next_offset_id) offsetId = data.next_offset_id;
+      failures = 0;
+      if (!updates.length) await sleep(1800);
+    } catch (e) {
+      failures++;
+      console.error("Rubika polling error:",e.message);
+      await sleep(Math.min(30000,1500 * failures));
+    }
+  }
+}
+if (botToken) void pollRubikaBot();
 const port = Number(process.env.PORT || 3000);
 app.listen(port,"0.0.0.0",()=>console.log("FileStorm publisher ready on "+port));
