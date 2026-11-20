@@ -170,12 +170,14 @@ async function runQueue() {
       const token = secrets.get(job.id);
       try {
         job.status = "downloading";
-        await download(job);
-        await publish(job, token);
+        await download(job, (percent, received, total) => updateBotProgress(job,"دانلود روی سرور",percent,received,total));
+        await updateBotProgress(job,"دانلود کامل شد؛ شروع انتقال به کانال",100,job.bytes,job.bytes);
+        await publish(job, token, (percent, sent, total, part, parts) => updateBotProgress(job,parts > 1 ? "آپلود بخش " + part + " از " + parts : "آپلود به کانال",percent,sent,total));
       } catch (e) {
         job.status = "failed";
         job.message = String(e?.message || "خطای نامشخص").slice(0,220);
         console.error("[FileStorm job " + job.id + " at " + job.status + "] " + job.message);
+        await updateBotProgress(job,"خطا: " + job.message,null);
       } finally {
         secrets.delete(job.id);
         if (job.filePath) {
