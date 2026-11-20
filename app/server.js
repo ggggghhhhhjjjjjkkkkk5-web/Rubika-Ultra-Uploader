@@ -14,6 +14,7 @@ const dataDir = process.env.DATA_DIR || "./data";
 const maxBytes = Number(process.env.MAX_FILE_BYTES || 950_000_000);
 const botToken = String(process.env.BOT_TOKEN || "").trim();
 const targetChannelId = String(process.env.TARGET_CHANNEL_ID || "").trim();
+const botWebhookSecret = String(process.env.BOT_WEBHOOK_SECRET || process.env.SESSION_SECRET || "").trim();
 const allowedBotUsers = new Set(String(process.env.BOT_ALLOWED_USERS || "").split(",").map(x=>x.trim()).filter(Boolean));
 const rubikaChunkBytes = Math.min(Number(process.env.RUBIKA_CHUNK_BYTES || 49 * 1024 * 1024), 49 * 1024 * 1024);
 fs.mkdirSync(dataDir, { recursive: true });
@@ -296,9 +297,25 @@ async function handleBotUpdate(update) {
   jobs.push(job);
   void runQueue();
 }
+app.post("/rubika/update/:secret", (req,res) => {
+  if (!botWebhookSecret || req.params.secret !== botWebhookSecret) return res.sendStatus(404);
+  const update = req.body?.update || req.body;
+  res.status(200).json({ok:true});
+  void handleBotUpdate(update).catch(e=>console.error("Webhook update handling failed:",e.message));
+});
 async function pollRubikaBot() {
   if (!botToken) { console.log("FileStorm bot polling disabled: BOT_TOKEN is not configured."); return; }
   if (!targetChannelId) console.warn("FileStorm bot: TARGET_CHANNEL_ID is not configured.");
+  if (botWebhookSecret) {
+    try {
+      const base = String(process.env.PUBLIC_BASE_URL || "https://filestorm-test.onrender.com").replace(/\\/$/,"");
+      await botCall(botToken,"updateBotEndpoints",{url:base + "/rubika/update/" + encodeURIComponent(botWebhookSecret),type:"ReceiveUpdate"});
+      console.log("FileStorm Rubika webhook registered.");
+      return;
+    } catch (e) {
+      console.warn("Rubika webhook registration failed; falling back to polling:",e.message);
+    }
+  }
   let offsetId;
   let failures = 0;
   try {
