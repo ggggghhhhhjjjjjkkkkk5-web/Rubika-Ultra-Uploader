@@ -1,22 +1,32 @@
-<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FileStorm</title>
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><title>FileStorm</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e8eefb;font-family:Tahoma,Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:20px}
-main{width:min(720px,100%);background:#121d31;border:1px solid #293954;border-radius:22px;padding:24px;box-shadow:0 20px 70px #0006}
-h1{margin:0 0 8px;font-size:25px}.muted{color:#9aabc6;font-size:13px;line-height:1.8}.field{display:grid;gap:8px;margin:16px 0}label{font-size:14px;color:#c6d3e8}input{width:100%;padding:14px;border-radius:12px;border:1px solid #344663;background:#0c1628;color:white;font-size:15px}
-button{padding:13px 18px;border:0;border-radius:12px;background:#3b82f6;color:white;font-weight:bold;font-size:14px;cursor:pointer}button.secondary{background:#263750}section{margin-top:22px;padding-top:18px;border-top:1px solid #293954}.job{padding:13px;border-radius:12px;background:#0c1628;margin:10px 0;font-size:13px}.bar{height:7px;background:#263750;border-radius:9px;margin-top:9px;overflow:hidden}.bar i{display:block;height:100%;background:#38bdf8;width:0}.status{color:#9aabc6;margin-top:5px}.hidden{display:none}.warning{background:#382d16;border:1px solid #66501e;color:#f4d48b;padding:12px;border-radius:12px;font-size:13px;line-height:1.8;margin:14px 0}
-</style></head><body><main><h1>FileStorm</h1><div class="muted">پنل خصوصی مدیریت دانلود و آماده‌سازی فایل برای انتشار در کانال</div>
-<div id="login"><div class="field"><label>رمز مدیریت</label><input id="password" type="password" autocomplete="current-password"></div><button onclick="login()">ورود به پنل</button></div>
-<div id="panel" class="hidden"><div class="warning">توجه: ارسال واقعی به روبیکا تا زمان اتصال یک آداپتر پشتیبانی‌شده فعال نیست. محدودیت حجم روبیکا باید جداگانه تأیید شود.</div>
-<div class="field"><label>لینک مستقیم فایل</label><input id="url" type="url" placeholder="https://example.com/video.mp4"></div>
-<div class="field"><label>شناسه کانال روبیکا</label><input id="channel" placeholder="شناسه کانال"></div>
-<button onclick="addJob()">افزودن به صف دانلود</button> <button class="secondary" onclick="logout()">خروج</button>
-<section><b>صف و تاریخچه</b><div id="jobs" class="muted">در حال بارگذاری...</div></section></div><div id="msg" class="status"></div></main>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:22px;background:radial-gradient(circle at top,#172b4a,#080e19 65%);color:#eaf1ff;font-family:Tahoma,Arial,sans-serif;display:grid;place-items:center}
+main{width:min(680px,100%);background:#111d30;border:1px solid #2b405f;border-radius:24px;padding:25px;box-shadow:0 22px 80px #0008}
+.brand{display:flex;align-items:center;gap:13px;margin-bottom:8px}.logo{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#38bdf8,#2563eb);display:grid;place-items:center;font-size:25px;font-weight:bold}
+h1{font-size:27px;margin:0}.sub{color:#9eb1cc;font-size:13px;line-height:1.9}
+.field{display:grid;gap:8px;margin:17px 0}label{font-size:13px;color:#c8d7ec}input{width:100%;padding:14px;border:1px solid #354c6d;border-radius:12px;background:#0a1424;color:#fff;font-size:14px;outline:none}input:focus{border-color:#38bdf8}
+button{border:0;border-radius:12px;padding:13px 19px;background:#2563eb;color:#fff;font-weight:bold;font-size:14px;cursor:pointer}button.alt{background:#293d59}.hidden{display:none}
+.note{margin:17px 0;padding:13px;border-radius:12px;background:#352c18;border:1px solid #685322;color:#f2d99b;font-size:12px;line-height:1.9}
+.status{font-size:13px;color:#9eb1cc;margin-top:13px}.jobs{margin-top:23px;border-top:1px solid #2b405f;padding-top:17px}.job{margin:10px 0;padding:13px;border-radius:13px;background:#0a1424;border:1px solid #243753;font-size:12px}.muted{color:#94a9c6;margin-top:6px;line-height:1.8}.bar{height:6px;border-radius:8px;background:#263b59;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:#38bdf8}
+</style></head><body><main>
+<div class="brand"><div class="logo">F</div><div><h1>FileStorm</h1><div class="sub">مدیریت دانلود فایل‌های حجیم</div></div></div>
+<div class="sub">لینک مستقیم را وارد کن، شناسه کانال مقصد را بنویس و وضعیت پردازش را ببین.</div>
+<div id="login"><div class="field"><label>رمز مدیریت</label><input id="password" type="password" autocomplete="current-password" placeholder="رمز پنل"></div><button onclick="login()">ورود به پنل</button></div>
+<div id="panel" class="hidden">
+<div class="note">نسخه آزمایشی: این سرور فایل را دانلود می‌کند، اما هنوز به سرویس انتشار مقصد متصل نیست. فضای هاست آزمایشی محدود و موقت است؛ برای فایل‌های بالای ۱ گیگابایت از اجرای محلی روی دستگاه دارای فضای کافی استفاده کن.</div>
+<div class="field"><label>لینک مستقیم فایل</label><input id="url" type="url" placeholder="https://example.com/file.mp4"></div>
+<div class="field"><label>شناسه کانال مقصد</label><input id="channel" placeholder="شناسه کانال"></div>
+<button onclick="addJob()">شروع دانلود</button> <button class="alt" onclick="logout()">خروج</button>
+<div class="jobs"><b>وضعیت فایل‌ها</b><div id="jobs" class="muted">هنوز فایلی ثبت نشده است.</div></div>
+</div><div id="msg" class="status"></div></main>
 <script>
+const $=id=>document.getElementById(id);
 async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'خطا');return d}
-async function login(){try{await api('/api/login',{password:document.getElementById('password').value});document.getElementById('login').classList.add('hidden');document.getElementById('panel').classList.remove('hidden');refresh()}catch(e){msg(e.message)}}
+function msg(t){$('msg').textContent=t}
+async function login(){try{await api('/api/login',{password:$('password').value});$('login').classList.add('hidden');$('panel').classList.remove('hidden');refresh()}catch(e){msg(e.message)}}
 async function logout(){await api('/api/logout',{});location.reload()}
-async function addJob(){try{const d=await api('/api/jobs',{url:document.getElementById('url').value,channelId:document.getElementById('channel').value});msg('در صف قرار گرفت: '+d.id);document.getElementById('url').value='';refresh()}catch(e){msg(e.message)}}
-function msg(t){document.getElementById('msg').textContent=t}
-async function refresh(){try{const jobs=await api('/api/jobs');document.getElementById('jobs').innerHTML=jobs.length?jobs.map(j=>`<div class="job"><b>#${j.id}</b> — ${j.data.fileName||j.state}<div class="status">${j.state}${j.error?' — '+j.error:''}</div><div class="bar"><i style="width:${typeof j.progress==='object'?(j.progress.percent||0):0}%"></i></div></div>`).join(''):'هنوز فایلی ثبت نشده است.'}catch(e){msg(e.message)}}
-setInterval(()=>{if(!document.getElementById('panel').classList.contains('hidden'))refresh()},4000);
+async function addJob(){try{const d=await api('/api/jobs',{url:$('url').value,channelId:$('channel').value});msg('درخواست ثبت شد: '+d.id);$('url').value='';refresh()}catch(e){msg(e.message)}}
+async function refresh(){try{const list=await api('/api/jobs');$('jobs').innerHTML=list.length?list.map(j=>'<div class="job"><b>#'+j.id+'</b> — '+(j.fileName||j.status)+'<div class="muted">'+j.message+'</div><div class="bar"><i style="width:'+((j.progress&&j.progress.percent)||0)+'%"></i></div></div>').join(''):'هنوز فایلی ثبت نشده است.'}catch(e){msg(e.message)}}
+setInterval(()=>{if(!$('panel').classList.contains('hidden'))refresh()},3000);
 </script></body></html>
