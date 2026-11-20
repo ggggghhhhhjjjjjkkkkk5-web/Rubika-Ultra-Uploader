@@ -1,34 +1,24 @@
 # FileStorm
 
-A private web panel and background worker for queueing direct-download URLs, downloading large files, and preparing them for publication to a destination channel.
+A Persian, password-protected test panel for downloading files from direct HTTP/HTTPS URLs.
 
-## Current status
+## Test deployment
 
-- Private password-protected Persian panel
-- Direct URL submission and destination channel ID field
-- Redis/BullMQ job queue and worker
-- Streaming downloads with a configurable size cap
-- Docker-based local deployment
-- Safe adapter boundary for a supported destination-platform upload client
+This single-service edition is designed for a free web-service smoke test. It uses in-memory job state and temporary server storage: jobs and downloaded files can disappear when the service restarts or sleeps. It is **not** suitable for reliable multi-gigabyte transfers on free hosting.
 
-**Important:** The current Rubika publishing adapter is a placeholder. Files can be downloaded, but they are not published to a channel until a supported and verified upload implementation is connected. Do not treat a queued or downloaded job as a successful publication.
+## Run locally (recommended for large files)
 
-## Run locally
-
-1. Copy `.env.example` to `.env`.
-2. Set a strong, unique `ADMIN_PASSWORD` and `SESSION_SECRET`.
-3. Start the stack with `docker compose up --build`.
+1. Install Node.js 20+.
+2. Copy `.env.example` to `.env` and set a strong `ADMIN_PASSWORD` and `SESSION_SECRET`.
+3. Run `npm install`, then `npm start`.
 4. Open `http://localhost:3000`.
 
-Local Docker is the intended no-hosting-fee test path. It uses the disk on the computer running it, so available storage must be greater than the file size plus working space. Keeping the computer online is required while jobs run.
+For large downloads, use a computer with enough free disk space and keep it running. This test server caps downloads using `MAX_FILE_BYTES` (default 950 MB); increase it only for a local machine with sufficient free storage.
 
-## Hosting
+## Publication status
 
-The included Render Blueprint uses paid resource types and a persistent disk. **Do not apply it if you require a completely free deployment.** Render's free ephemeral filesystem is not suitable for retaining multi-gigabyte downloads.
+The current version only downloads and retains a file temporarily. It does not publish to a channel. A supported and verified destination upload adapter is still required; no undocumented endpoints or account-session scraping are used.
 
 ## Security
 
-- Only submit public HTTP/HTTPS direct-download URLs.
-- Only upload files you own or are authorized to distribute.
-- Never commit `.env`, passwords, access tokens, cookies, or session files.
-- Never use undocumented private endpoints or scrape account sessions.
+Use a strong admin password. Only submit public HTTP/HTTPS links to files you are authorized to distribute. Never commit passwords, tokens, cookies, or session data.
