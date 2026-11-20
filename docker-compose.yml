@@ -1,0 +1,21 @@
+services:
+  web:
+    build: .
+    command: npm start
+    ports: ["3000:3000"]
+    env_file: .env
+    volumes: ["uploader-data:/data"]
+    depends_on: [redis]
+  worker:
+    build: .
+    command: npm run worker
+    env_file: .env
+    volumes: ["uploader-data:/data"]
+    depends_on: [redis]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]
+volumes:
+  uploader-data:
+  redis-data:
