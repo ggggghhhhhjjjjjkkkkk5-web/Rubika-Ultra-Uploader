@@ -308,7 +308,7 @@ async function pollRubikaBot() {
   if (!targetChannelId) console.warn("FileStorm bot: TARGET_CHANNEL_ID is not configured.");
   if (botWebhookSecret) {
     try {
-      const base = String(process.env.PUBLIC_BASE_URL || "https://filestorm-test.onrender.com").replace(/\\/$/,"");
+      const base = String(process.env.PUBLIC_BASE_URL || "https://filestorm-test.onrender.com").replace(/\/$/,"");
       await botCall(botToken,"updateBotEndpoints",{url:base + "/rubika/update/" + encodeURIComponent(botWebhookSecret),type:"ReceiveUpdate"});
       console.log("FileStorm Rubika webhook registered.");
       return;
