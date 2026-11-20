@@ -2,22 +2,25 @@
 <html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><title>FileStorm</title>
 <style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:22px;background:radial-gradient(circle at top,#172b4a,#080e19 65%);color:#eaf1ff;font-family:Tahoma,Arial,sans-serif;display:grid;place-items:center}
-main{width:min(680px,100%);background:#111d30;border:1px solid #2b405f;border-radius:24px;padding:25px;box-shadow:0 22px 80px #0008}
+main{width:min(720px,100%);background:#111d30;border:1px solid #2b405f;border-radius:24px;padding:25px;box-shadow:0 22px 80px #0008}
 .brand{display:flex;align-items:center;gap:13px;margin-bottom:8px}.logo{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#38bdf8,#2563eb);display:grid;place-items:center;font-size:25px;font-weight:bold}
 h1{font-size:27px;margin:0}.sub{color:#9eb1cc;font-size:13px;line-height:1.9}
 .field{display:grid;gap:8px;margin:17px 0}label{font-size:13px;color:#c8d7ec}input{width:100%;padding:14px;border:1px solid #354c6d;border-radius:12px;background:#0a1424;color:#fff;font-size:14px;outline:none}input:focus{border-color:#38bdf8}
 button{border:0;border-radius:12px;padding:13px 19px;background:#2563eb;color:#fff;font-weight:bold;font-size:14px;cursor:pointer}button.alt{background:#293d59}.hidden{display:none}
 .note{margin:17px 0;padding:13px;border-radius:12px;background:#352c18;border:1px solid #685322;color:#f2d99b;font-size:12px;line-height:1.9}
-.status{font-size:13px;color:#9eb1cc;margin-top:13px}.jobs{margin-top:23px;border-top:1px solid #2b405f;padding-top:17px}.job{margin:10px 0;padding:13px;border-radius:13px;background:#0a1424;border:1px solid #243753;font-size:12px}.muted{color:#94a9c6;margin-top:6px;line-height:1.8}.bar{height:6px;border-radius:8px;background:#263b59;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:#38bdf8}
+.status{font-size:13px;color:#9eb1cc;margin-top:13px}.jobs{margin-top:23px;border-top:1px solid #2b405f;padding-top:17px}.job{margin:10px 0;padding:13px;border-radius:13px;background:#0a1424;border:1px solid #243753;font-size:12px}.muted{color:#94a9c6;margin-top:6px;line-height:1.8}.bar{height:6px;border-radius:8px;background:#263b59;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:#38bdf8}.row{display:flex;gap:8px;flex-wrap:wrap}
 </style></head><body><main>
-<div class="brand"><div class="logo">F</div><div><h1>FileStorm</h1><div class="sub">مدیریت دانلود فایل‌های حجیم</div></div></div>
-<div class="sub">لینک مستقیم را وارد کن، شناسه کانال مقصد را بنویس و وضعیت پردازش را ببین.</div>
+<div class="brand"><div class="logo">F</div><div><h1>FileStorm</h1><div class="sub">دانلود و انتشار خودکار فایل در کانال</div></div></div>
+<div class="sub">لینک مستقیم فایل را وارد کن؛ FileStorm آن را دریافت و با بات در کانال مقصد منتشر می‌کند.</div>
 <div id="login"><div class="field"><label>رمز مدیریت</label><input id="password" type="password" autocomplete="current-password" placeholder="رمز پنل"></div><button onclick="login()">ورود به پنل</button></div>
 <div id="panel" class="hidden">
-<div class="note">نسخه آزمایشی: این سرور فایل را دانلود می‌کند، اما هنوز به سرویس انتشار مقصد متصل نیست. فضای هاست آزمایشی محدود و موقت است؛ برای فایل‌های بالای ۱ گیگابایت از اجرای محلی روی دستگاه دارای فضای کافی استفاده کن.</div>
+<div class="note">برای اتصال، از BotFather توکن بات را بگیر و بات را در کانال مقصد مدیر کن و اجازه ارسال پیام/فایل بده. توکن فقط برای همان عملیات در حافظه موقت سرور استفاده می‌شود و در فهرست کارها ذخیره یا نمایش داده نمی‌شود. سقف این هاست آزمایشی حدود ۹۵۰ مگابایت است؛ برای فایل‌های بالای ۱ گیگابایت به سرور یا رایانه‌ای با فضای کافی نیاز است.</div>
+<div class="field"><label>توکن بات</label><input id="token" type="password" autocomplete="off" placeholder="توکن دریافتی از BotFather"></div>
+<div class="row"><button class="alt" onclick="checkBot()">بررسی اتصال بات</button><span id="botstate" class="status"></span></div>
 <div class="field"><label>لینک مستقیم فایل</label><input id="url" type="url" placeholder="https://example.com/file.mp4"></div>
 <div class="field"><label>شناسه کانال مقصد</label><input id="channel" placeholder="شناسه کانال"></div>
-<button onclick="addJob()">شروع دانلود</button> <button class="alt" onclick="logout()">خروج</button>
+<div class="field"><label>توضیح همراه فایل (اختیاری)</label><input id="caption" maxlength="1000" placeholder="توضیح فایل"></div>
+<div class="row"><button onclick="addJob()">دانلود و ارسال به کانال</button><button class="alt" onclick="logout()">خروج</button></div>
 <div class="jobs"><b>وضعیت فایل‌ها</b><div id="jobs" class="muted">هنوز فایلی ثبت نشده است.</div></div>
 </div><div id="msg" class="status"></div></main>
 <script>
@@ -26,7 +29,9 @@ async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET'
 function msg(t){$('msg').textContent=t}
 async function login(){try{await api('/api/login',{password:$('password').value});$('login').classList.add('hidden');$('panel').classList.remove('hidden');refresh()}catch(e){msg(e.message)}}
 async function logout(){await api('/api/logout',{});location.reload()}
-async function addJob(){try{const d=await api('/api/jobs',{url:$('url').value,channelId:$('channel').value});msg('درخواست ثبت شد: '+d.id);$('url').value='';refresh()}catch(e){msg(e.message)}}
-async function refresh(){try{const list=await api('/api/jobs');$('jobs').innerHTML=list.length?list.map(j=>'<div class="job"><b>#'+j.id+'</b> — '+(j.fileName||j.status)+'<div class="muted">'+j.message+'</div><div class="bar"><i style="width:'+((j.progress&&j.progress.percent)||0)+'%"></i></div></div>').join(''):'هنوز فایلی ثبت نشده است.'}catch(e){msg(e.message)}}
+async function checkBot(){try{const d=await api('/api/bot/check',{token:$('token').value});$('botstate').textContent='متصل: '+d.name;msg('توکن معتبر است.')}catch(e){$('botstate').textContent='';msg(e.message)}}
+async function addJob(){try{const d=await api('/api/jobs',{url:$('url').value,channelId:$('channel').value,token:$('token').value,caption:$('caption').value});msg('درخواست ثبت شد: '+d.id);$('url').value='';$('token').value='';$('caption').value='';refresh()}catch(e){msg(e.message)}}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function refresh(){try{const list=await api('/api/jobs');$('jobs').innerHTML=list.length?list.map(j=>'<div class="job"><b>#'+esc(j.id)+'</b> — '+esc(j.fileName||j.status)+'<div class="muted">'+esc(j.message||'')+(j.bytes?' · '+(j.bytes/1048576).toFixed(1)+' MB':'')+(j.messageId?' · پیام: '+esc(j.messageId):'')+'</div><div class="bar"><i style="width:'+((j.progress&&j.progress.percent)||0)+'%"></i></div></div>').join(''):'هنوز فایلی ثبت نشده است.'}catch(e){msg(e.message)}}
 setInterval(()=>{if(!$('panel').classList.contains('hidden'))refresh()},3000);
 </script></body></html>
