@@ -55,11 +55,18 @@ function apiUrl(token, method) {
   return "https://botapi.rubika.ir/v3/" + encodeURIComponent(token) + "/" + method;
 }
 async function botCall(token, method, body = {}) {
-  const response = await axios.post(apiUrl(token, method), body, { timeout: 30000, maxRedirects: 0 });
+  let response;
+  try {
+    response = await axios.post(apiUrl(token, method), body, { timeout: 30000, maxRedirects: 0 });
+  } catch (e) {
+    const payload = e?.response?.data;
+    const detail = payload?.status_det || payload?.message || e?.message || "ارتباط با API برقرار نشد";
+    throw new Error("خطای " + method + ": " + String(detail).slice(0,180));
+  }
   const data = response.data;
   if (!data || data.status !== "OK") {
     const detail = String(data?.status_det || data?.message || "پاسخ نامعتبر از سرویس بات");
-    throw new Error("خطای API بات: " + detail.slice(0,180));
+    throw new Error("خطای " + method + ": " + detail.slice(0,180));
   }
   return data.data || {};
 }
@@ -119,8 +126,10 @@ async function publish(job, token) {
   const fileId = uploaded.data?.data?.file_id || uploaded.data?.file_id;
   if (!fileId) throw new Error("آپلود انجام شد اما شناسه فایل دریافت نشد.");
   job.status = "sending";
-  const sent = await botCall(token, "sendFile", { chat_id:job.channelId, file_id:fileId, text:job.caption || "" });
-  if (!sent.message_id) throw new Error("پاسخ ارسال فایل شناسه پیام نداشت؛ دسترسی بات به کانال را بررسی کنید.");
+  const payload = { chat_id:job.channelId, file_id:fileId };
+  if (job.caption) payload.text = job.caption;
+  const sent = await botCall(token, "sendFile", payload);
+  if (!sent.message_id) throw new Error("فایل آپلود شد اما API شناسه پیام برنگرداند؛ شناسه کانال و دسترسی بات را بررسی کنید.");
   job.messageId = sent.message_id;
   job.status = "sent";
   job.message = "فایل با موفقیت در کانال ارسال شد.";
@@ -140,6 +149,7 @@ async function runQueue() {
       } catch (e) {
         job.status = "failed";
         job.message = String(e?.message || "خطای نامشخص").slice(0,220);
+        console.error("[FileStorm job " + job.id + " at " + job.status + "] " + job.message);
       } finally {
         secrets.delete(job.id);
         if (job.filePath) {
@@ -158,6 +168,23 @@ app.post("/api/bot/check", requireAuth, async (req,res) => {
     const bot = data.bot || data;
     res.json({ok:true,name:bot.name || bot.username || "بات متصل شد",username:bot.username || ""});
   } catch(e) { res.status(400).json({error:String(e.message || "اتصال ناموفق").slice(0,220)}); }
+});
+app.post("/api/bot/check-channel", requireAuth, async (req,res) => {
+  const token = String(req.body.token || "").trim();
+  const channelId = String(req.body.channelId || "").trim();
+  if (!token || !channelId) return res.status(400).json({error:"توکن بات و شناسه کانال را وارد کنید."});
+  try {
+    const data = await botCall(token,"getChat",{chat_id:channelId});
+    const chat = data.chat || data;
+    const type = chat.chat_type || chat.type || "";
+    const title = chat.title || chat.name || chat.username || "کانال";
+    if (type && String(type).toLowerCase() !== "channel") {
+      return res.status(400).json({error:"این شناسه مربوط به کانال نیست (نوع برگشتی: " + type + ")."});
+    }
+    const sent = await botCall(token,"sendMessage",{chat_id:channelId,text:"FileStorm: بررسی دسترسی ارسال بات با موفقیت انجام شد."});
+    if (!sent.message_id) throw new Error("پیام آزمایشی ارسال نشد؛ بات را در کانال مدیر کنید و مجوز ارسال پیام بدهید.");
+    res.json({ok:true,title,type,messageId:sent.message_id});
+  } catch(e) { res.status(400).json({error:String(e.message || "بررسی کانال ناموفق بود").slice(0,220)}); }
 });
 app.post("/api/jobs", requireAuth, (req,res) => {
   const url = String(req.body.url || "").trim();
