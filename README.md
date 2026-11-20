@@ -1,29 +1,34 @@
-# Rubika Ultra Uploader (starter)
+# FileStorm
 
-A private web panel + background worker for queueing direct-download URLs and forwarding files to a Rubika channel.
+A private web panel and background worker for queueing direct-download URLs, downloading large files, and preparing them for publication to a destination channel.
 
-## Important Rubika limitation
-This project deliberately does **not** pretend that a normal Bot API can upload arbitrary 1GB+ files. The included adapter is a safe integration boundary. You must provide a supported Rubika upload implementation/account session and verify the platform's current upload limits. No undocumented endpoints, session scraping, or bypasses are included.
+## Current status
 
-## Features
-- Password-protected private panel
-- Add direct file URLs to a persistent Redis queue
-- Server-side streaming download to a persistent disk
-- File size cap configurable by environment
-- URL safety checks (HTTP/HTTPS only, block private/local IP ranges)
-- Queue worker, retries, progress/status tracking
-- Adapter interface for a supported Rubika client
-- Docker + Render Blueprint starter
+- Private password-protected Persian panel
+- Direct URL submission and destination channel ID field
+- Redis/BullMQ job queue and worker
+- Streaming downloads with a configurable size cap
+- Docker-based local deployment
+- Safe adapter boundary for a supported destination-platform upload client
 
-## Local run
-1. Copy `.env.example` to `.env` and set a long `ADMIN_PASSWORD` and `SESSION_SECRET`.
-2. `docker compose up --build`
-3. Open http://localhost:3000
+**Important:** The current Rubika publishing adapter is a placeholder. Files can be downloaded, but they are not published to a channel until a supported and verified upload implementation is connected. Do not treat a queued or downloaded job as a successful publication.
 
-Without a configured Rubika adapter, jobs download and stop at `awaiting_rubika_adapter`; downloaded files are retained on the persistent disk and are not falsely marked as published. The adapter is intentionally not wired to undocumented account endpoints.
+## Run locally
 
-## Deployment
-Use a Render workspace with a paid persistent disk and a Redis-compatible Key Value instance. Render's free ephemeral filesystem is not suitable for retaining multi-GB downloads. Review `render.yaml` before applying any paid infrastructure.
+1. Copy `.env.example` to `.env`.
+2. Set a strong, unique `ADMIN_PASSWORD` and `SESSION_SECRET`.
+3. Start the stack with `docker compose up --build`.
+4. Open `http://localhost:3000`.
 
-## Safety
-Only submit files you own or have permission to distribute. Never commit `.env`, cookies, tokens, or session files.
+Local Docker is the intended no-hosting-fee test path. It uses the disk on the computer running it, so available storage must be greater than the file size plus working space. Keeping the computer online is required while jobs run.
+
+## Hosting
+
+The included Render Blueprint uses paid resource types and a persistent disk. **Do not apply it if you require a completely free deployment.** Render's free ephemeral filesystem is not suitable for retaining multi-gigabyte downloads.
+
+## Security
+
+- Only submit public HTTP/HTTPS direct-download URLs.
+- Only upload files you own or are authorized to distribute.
+- Never commit `.env`, passwords, access tokens, cookies, or session files.
+- Never use undocumented private endpoints or scrape account sessions.
