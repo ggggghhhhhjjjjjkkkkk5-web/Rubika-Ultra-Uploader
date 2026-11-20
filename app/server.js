@@ -173,6 +173,7 @@ async function runQueue() {
         await download(job, (percent, received, total) => updateBotProgress(job,"دانلود روی سرور",percent,received,total));
         await updateBotProgress(job,"دانلود کامل شد؛ شروع انتقال به کانال",100,job.bytes,job.bytes);
         await publish(job, token, (percent, sent, total, part, parts) => updateBotProgress(job,parts > 1 ? "آپلود بخش " + part + " از " + parts : "آپلود به کانال",percent,sent,total));
+        await updateBotProgress(job,"انتقال کامل شد؛ فایل در کانال منتشر شد",100,job.bytes,job.bytes);
       } catch (e) {
         job.status = "failed";
         job.message = String(e?.message || "خطای نامشخص").slice(0,220);
