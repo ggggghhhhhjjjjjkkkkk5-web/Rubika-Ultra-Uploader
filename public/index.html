@@ -16,7 +16,7 @@ button{border:0;border-radius:12px;padding:13px 19px;background:#2563eb;color:#f
 <div id="panel" class="hidden">
 <div class="note">برای اتصال، از BotFather توکن بات را بگیر و بات را در کانال مقصد مدیر کن و اجازه ارسال پیام/فایل بده. توکن فقط برای همان عملیات در حافظه موقت سرور استفاده می‌شود و در فهرست کارها ذخیره یا نمایش داده نمی‌شود. سقف این هاست آزمایشی حدود ۹۵۰ مگابایت است؛ برای فایل‌های بالای ۱ گیگابایت به سرور یا رایانه‌ای با فضای کافی نیاز است.</div>
 <div class="field"><label>توکن بات</label><input id="token" type="password" autocomplete="off" placeholder="توکن دریافتی از BotFather"></div>
-<div class="row"><button class="alt" onclick="checkBot()">بررسی اتصال بات</button><span id="botstate" class="status"></span></div>
+<div class="row"><button class="alt" onclick="checkBot()">بررسی اتصال بات</button><button class="alt" onclick="checkChannel()">بررسی دسترسی کانال (ارسال پیام آزمایشی)</button><span id="botstate" class="status"></span></div>
 <div class="field"><label>لینک مستقیم فایل</label><input id="url" type="url" placeholder="https://example.com/file.mp4"></div>
 <div class="field"><label>شناسه کانال مقصد</label><input id="channel" placeholder="شناسه کانال"></div>
 <div class="field"><label>توضیح همراه فایل (اختیاری)</label><input id="caption" maxlength="1000" placeholder="توضیح فایل"></div>
@@ -30,6 +30,7 @@ function msg(t){$('msg').textContent=t}
 async function login(){try{await api('/api/login',{password:$('password').value});$('login').classList.add('hidden');$('panel').classList.remove('hidden');refresh()}catch(e){msg(e.message)}}
 async function logout(){await api('/api/logout',{});location.reload()}
 async function checkBot(){try{const d=await api('/api/bot/check',{token:$('token').value});$('botstate').textContent='متصل: '+d.name;msg('توکن معتبر است.')}catch(e){$('botstate').textContent='';msg(e.message)}}
+async function checkChannel(){try{const d=await api('/api/bot/check-channel',{token:$('token').value,channelId:$('channel').value});msg('کانال «'+d.title+'» آماده است؛ پیام آزمایشی ارسال شد. شناسه پیام: '+d.messageId)}catch(e){msg(e.message)}}
 async function addJob(){try{const d=await api('/api/jobs',{url:$('url').value,channelId:$('channel').value,token:$('token').value,caption:$('caption').value});msg('درخواست ثبت شد: '+d.id);$('url').value='';$('token').value='';$('caption').value='';refresh()}catch(e){msg(e.message)}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function refresh(){try{const list=await api('/api/jobs');$('jobs').innerHTML=list.length?list.map(j=>'<div class="job"><b>#'+esc(j.id)+'</b> — '+esc(j.fileName||j.status)+'<div class="muted">'+esc(j.message||'')+(j.bytes?' · '+(j.bytes/1048576).toFixed(1)+' MB':'')+(j.messageId?' · پیام: '+esc(j.messageId):'')+'</div><div class="bar"><i style="width:'+((j.progress&&j.progress.percent)||0)+'%"></i></div></div>').join(''):'هنوز فایلی ثبت نشده است.'}catch(e){msg(e.message)}}
