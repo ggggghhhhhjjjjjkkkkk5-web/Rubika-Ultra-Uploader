@@ -91,7 +91,17 @@ async function download(job, onProgress = async () => {}) {
       if (!response.ok || !response.body) throw new Error("دانلود ناموفق: HTTP " + response.status);
       const declared = Number(response.headers.get("content-length") || 0);
       if (declared > maxBytes) throw new Error("حجم فایل از سقف این نسخه بیشتر است.");
-      const fileName = path.basename(new URL(current).pathname) || "download.bin";
+      const disposition = response.headers.get("content-disposition") || "";
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+      let headerName = "";
+      try { headerName = encodedName ? decodeURIComponent(encodedName) : (plainName || ""); } catch {}
+      const urlName = path.basename(decodeURIComponent(new URL(current).pathname)) || "";
+      const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      const mimeExtensions = { "video/mp4":".mp4", "video/webm":".webm", "video/quicktime":".mov", "audio/mpeg":".mp3", "audio/mp4":".m4a", "image/jpeg":".jpg", "image/png":".png", "image/webp":".webp", "application/pdf":".pdf", "application/zip":".zip" };
+      let fileName = path.basename(headerName || urlName || "download");
+      if (!path.extname(fileName) && mimeExtensions[mime]) fileName += mimeExtensions[mime];
+      if (!path.extname(fileName)) fileName += ".bin";
       const safeName = fileName.replace(/[^\p{L}\p{N}._-]/gu,"_").slice(0,120) || "download.bin";
       const target = path.join(dataDir, job.id + "-" + safeName);
       const out = fs.createWriteStream(target,{flags:"wx"});
